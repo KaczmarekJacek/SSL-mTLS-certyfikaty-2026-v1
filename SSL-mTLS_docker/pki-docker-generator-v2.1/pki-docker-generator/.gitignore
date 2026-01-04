@@ -1,0 +1,27 @@
+# PKI Generator - Git Ignore
+
+# Generated certificates (NIGDY nie commituj kluczy prywatnych!)
+certs/
+*.key
+*.p12
+*.pfx
+*.jks
+
+# Ale zachowaj przykładowe pliki konfiguracji
+!certs/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary
+*.tmp
+*.temp
