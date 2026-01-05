@@ -1,0 +1,50 @@
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              ROOT CA                                         │
+│                         (Self-signed)                                        │
+│                                                                              │
+│   rootCA.key ──────► rootCA.crt                                             │
+│   (klucz prywatny)   (certyfikat publiczny)                                 │
+│                                                                              │
+│   "Jestem Root CA i sam sobie ufam"                                         │
+└─────────────────────────────────┬───────────────────────────────────────────┘
+                                  │
+                                  │ PODPISUJE (kluczem rootCA.key)
+                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                          INTERMEDIATE CA                                     │
+│                                                                              │
+│   intermediateCA.key ──────► intermediateCA.crt                             │
+│   (klucz prywatny)           (certyfikat podpisany przez Root CA)           │
+│                                                                              │
+│   "Root CA potwierdza, że jestem uprawniony do wydawania certyfikatów"      │
+└──────────┬──────────────────────┬──────────────────────┬────────────────────┘
+           │                      │                      │
+           │ PODPISUJE            │ PODPISUJE            │ PODPISUJE
+           ▼                      ▼                      ▼
+┌──────────────────┐    ┌──────────────────┐    ┌──────────────────┐
+│     SERVER       │    │   SERVICE-A      │    │   SERVICE-B      │
+│                  │    │                  │    │                  │
+│ server.key ─►    │    │ client.key ─►    │    │ client.key ─►    │
+│ server.crt       │    │ client.crt       │    │ client.crt       │
+│                  │    │                  │    │                  │
+│ CN=localhost     │    │ CN=service-a     │    │ CN=service-b     │
+└──────────────────┘    └──────────────────┘    └──────────────────┘
+
+Kluczowa relacja: Wspólny "rodzic"
+Wszystkie certyfikaty (server + clients) są podpisane przez to samo Intermediate CA, co oznacza:
+
+INTERMEDIATE CA
+                    (wspólny rodzic)
+                          │
+        ┌─────────────────┼─────────────────┐
+        │                 │                 │
+        ▼                 ▼                 ▼
+    server.crt      service-a.crt    service-b.crt
+        │                 │                 │
+        └─────────────────┴─────────────────┘
+                          │
+                    RODZEŃSTWO
+              (wzajemnie sobie ufają,
+               bo mają tego samego rodzica)
+
+

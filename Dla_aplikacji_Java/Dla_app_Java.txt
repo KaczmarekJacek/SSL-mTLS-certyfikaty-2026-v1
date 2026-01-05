@@ -1,0 +1,21 @@
+    Cel                        Plik                                     Hasło domyślne
+|---------------------------|-----------------------------------------------|----------------------
+| Serwer TLS                | java-keystores/server-keystore.p12            | changeit
+|---------------------------|-----------------------------------------------|----------------------
+| Klient mTLS               | java-keystores/client-service-a-keystore.p12  | changeit
+|---------------------------|-----------------------------------------------|----------------------
+| Weryfikacja certyfikatów  | certs/root-ca/rootCA.crt                      | changeit
+|---------------------------|-----------------------------------------------|----------------------
+
+Komendy:
+# Wyciągnij certyfikat z keystore
+openssl pkcs12 -in java-keystores/server-keystore.p12 \
+  -clcerts -nokeys -out server-extracted.crt -passin pass:changeit
+
+# Wyciągnij klucz prywatny
+openssl pkcs12 -in java-keystores/server-keystore.p12 \
+  -nocerts -nodes -out server-extracted.key -passin pass:changeit
+
+# Wyciągnij CA chain z truststore
+openssl pkcs12 -in java-keystores/truststore.p12 \
+  -cacerts -nokeys -out ca-chain-extracted.crt -passin pass:changeit
