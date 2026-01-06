@@ -86,7 +86,12 @@ log_step() {
 }
 
 run_openssl() {
-    docker run --rm -v "$(pwd)/${EXPORT_DIR}:/export" "${DOCKER_IMAGE}" "$@"
+    # Uruchamiamy Docker z UID/GID bieżącego użytkownika
+    # aby pliki były tworzone z właściwymi uprawnieniami (nie root:root)
+    docker run --rm \
+        --user "$(id -u):$(id -g)" \
+        -v "$(pwd)/${EXPORT_DIR}:/export" \
+        "${DOCKER_IMAGE}" "$@"
 }
 
 check_docker() {

@@ -51,6 +51,8 @@ PKI Docker Generator v2.1 to narzędzie do generowania kompletnej hierarchii cer
 
 Generator automatycznie pobiera obraz Docker `alpine/openssl` przy pierwszym uruchomieniu.
 
+> **Uwaga:** Skrypt uruchamia Docker z flagą `--user $(id -u):$(id -g)`, dzięki czemu wszystkie wygenerowane pliki należą do bieżącego użytkownika (nie `root:root`).
+
 ---
 
 ## Szybki start
