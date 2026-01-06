@@ -363,11 +363,96 @@ make client CLIENT_CN="service-a"
 |---------|-----------|------|
 | `SERVER_CN` | `localhost` | Common Name serwera |
 | `SERVER_SANS` | (patrz niżej) | Subject Alternative Names |
+| `ADD_SERVER_SANS` | (puste) | Dodatkowe SANs (dołączane do SERVER_SANS) |
 
-Domyślne SAN:
+Domyślne SANs:
 ```
-DNS:localhost,DNS:*.localhost,DNS:*.default.svc.cluster.local,
-DNS:*.svc.cluster.local,IP:127.0.0.1,IP:10.0.0.1
+DNS:localhost,DNS:*.localhost,IP:127.0.0.1
+```
+
+---
+
+## Subject Alternative Names (SANs)
+
+SANs określają dla jakich hostów i adresów IP certyfikat jest ważny. To kluczowa funkcja przy użyciu certyfikatów w środowiskach z wieloma domenami lub adresami IP.
+
+### Format SANs
+
+```
+DNS:nazwa.domeny,DNS:inna.domena,IP:192.168.1.100,IP:10.0.0.1
+```
+
+| Prefix | Opis | Przykład |
+|--------|------|----------|
+| `DNS:` | Nazwa domenowa | `DNS:myapp.local` |
+| `IP:` | Adres IP | `IP:192.168.122.100` |
+
+### Dwa tryby konfiguracji
+
+**1. Zastąpienie domyślnych SANs (`SERVER_SANS`)**
+
+```bash
+# Całkowicie zastępuje domyślne SANs
+SERVER_SANS="DNS:myserver.local,DNS:api.myserver.local,IP:192.168.1.100" make server
+```
+
+**2. Dodanie do domyślnych SANs (`ADD_SERVER_SANS`)**
+
+```bash
+# Dodaje do domyślnych (localhost, *.localhost, 127.0.0.1)
+ADD_SERVER_SANS="DNS:vm1.local,DNS:lab3.local,IP:192.168.122.100" make server
+```
+
+### Przykłady użycia
+
+#### Środowisko lokalne z VM
+
+```bash
+ADD_SERVER_SANS="DNS:vm1.local,IP:192.168.122.100" make server
+```
+
+Wynikowe SANs:
+- `DNS:localhost` (domyślny)
+- `DNS:*.localhost` (domyślny)
+- `IP:127.0.0.1` (domyślny)
+- `DNS:vm1.local` (dodany)
+- `IP:192.168.122.100` (dodany)
+
+#### Kubernetes Lab
+
+```bash
+ADD_SERVER_SANS="DNS:nginx-lab3.lab-3.svc.cluster.local,DNS:nginx-lab3.lab-3.svc,DNS:nginx-lab3,IP:10.96.0.50" make server
+```
+
+#### Pełna konfiguracja dla laboratorium
+
+```bash
+SERVER_SANS="DNS:vm1.local,DNS:lab3.local,DNS:nginx-lab3.lab-3.svc.cluster.local,DNS:nginx-lab3.lab-3.svc,DNS:nginx-lab3,DNS:localhost,IP:192.168.122.100,IP:127.0.0.1" make server
+```
+
+| Typ | Wartość | Użycie |
+|-----|---------|--------|
+| DNS | `vm1.local` | Dostęp z hosta przez hostname |
+| DNS | `lab3.local` | Alias dla laboratorium |
+| DNS | `nginx-lab3.lab-3.svc.cluster.local` | FQDN wewnątrz Kubernetes |
+| DNS | `nginx-lab3.lab-3.svc` | Skrócona nazwa w klastrze |
+| DNS | `nginx-lab3` | Nazwa w tym samym namespace |
+| DNS | `localhost` | Testy lokalne |
+| IP | `192.168.122.100` | Adres IP VM |
+| IP | `127.0.0.1` | Localhost |
+
+### Weryfikacja SANs
+
+Po wygenerowaniu certyfikatu sprawdź SANs:
+
+```bash
+make show-server
+```
+
+Lub ręcznie:
+
+```bash
+openssl x509 -noout -ext subjectAltName -in certs/server/server.crt
 ```
 
 ### Ważność certyfikatów

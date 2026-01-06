@@ -30,6 +30,11 @@ DEFAULT_CLIENTS ?= default-client
 # Nowy klient (dla make client)
 CLIENT_CN      ?=
 
+# Subject Alternative Names dla serwera
+# Format: "DNS:nazwa1,DNS:nazwa2,IP:1.2.3.4"
+SERVER_SANS    ?=
+ADD_SERVER_SANS ?=
+
 # Ścieżki do certyfikatów
 ROOT_CA_CRT      := $(EXPORT_DIR)/root-ca/certs/rootCA.crt
 INTERMEDIATE_CRT := $(EXPORT_DIR)/intermediate-ca/certs/intermediateCA.crt
@@ -51,7 +56,10 @@ NC     := \033[0m
 ## all: Pełna regeneracja (CA → Server → Clients → Keystores → K8s)
 all:
 	@chmod +x $(SCRIPTS_DIR)/generate-certificates.sh
-	@DEFAULT_CLIENTS="$(DEFAULT_CLIENTS)" $(SCRIPTS_DIR)/generate-certificates.sh all
+	@DEFAULT_CLIENTS="$(DEFAULT_CLIENTS)" \
+		SERVER_SANS="$(SERVER_SANS)" \
+		ADD_SERVER_SANS="$(ADD_SERVER_SANS)" \
+		$(SCRIPTS_DIR)/generate-certificates.sh all
 
 ## ca: Generuj tylko Root CA + Intermediate CA (idempotentne)
 ca:
@@ -62,7 +70,9 @@ ca:
 ## server: Generuj tylko certyfikat serwera
 server:
 	@chmod +x $(SCRIPTS_DIR)/generate-certificates.sh
-	@$(SCRIPTS_DIR)/generate-certificates.sh server
+	@SERVER_SANS="$(SERVER_SANS)" \
+		ADD_SERVER_SANS="$(ADD_SERVER_SANS)" \
+		$(SCRIPTS_DIR)/generate-certificates.sh server
 	@echo -e "$(GREEN)✓ Certyfikat serwera gotowy$(NC)"
 
 ## client: Dodaj nowego klienta (wymaga CLIENT_CN=nazwa)
@@ -178,6 +188,13 @@ show-server:
 	@echo -e "$(CYAN)=== Server Certificate ===$(NC)"
 	@docker run --rm -v $(PWD)/$(EXPORT_DIR):/export $(DOCKER_IMAGE) \
 		x509 -noout -subject -issuer -dates -ext subjectAltName \
+		-in /export/server/server.crt 2>/dev/null || echo "Certyfikat serwera nie istnieje"
+
+## show-sans: Pokaż tylko Subject Alternative Names serwera
+show-sans:
+	@echo -e "$(CYAN)=== Server SANs ===$(NC)"
+	@docker run --rm -v $(PWD)/$(EXPORT_DIR):/export $(DOCKER_IMAGE) \
+		x509 -noout -ext subjectAltName \
 		-in /export/server/server.crt 2>/dev/null || echo "Certyfikat serwera nie istnieje"
 
 ## show-client: Pokaż szczegóły certyfikatu klienta (CLIENT_CN=nazwa)
@@ -330,6 +347,8 @@ help:
 	@echo -e "  DEFAULT_CLIENTS=\"svc-a,svc-b,admin\"  Lista domyślnych klientów"
 	@echo -e "  CLIENT_CN=\"nazwa\"                   CN dla nowego klienta"
 	@echo -e "  EXPORT_DIR=\"./certs\"                Katalog wyjściowy"
+	@echo -e "  SERVER_SANS=\"DNS:x,IP:y\"            Subject Alternative Names"
+	@echo -e "  ADD_SERVER_SANS=\"DNS:x,IP:y\"        Dodatkowe SANs (dołączane)"
 	@echo ""
 	@echo -e "$(YELLOW)PRZYKŁADY:$(NC)"
 	@echo -e "  make ca                              # Wygeneruj CA (raz)"
@@ -338,5 +357,15 @@ help:
 	@echo -e "  make client CLIENT_CN=admin         # I jeszcze jednego"
 	@echo -e "  make list                           # Pokaż wszystkich"
 	@echo -e "  DEFAULT_CLIENTS=\"a,b,c\" make all    # Wielu klientów na raz"
+	@echo ""
+	@echo -e "$(YELLOW)PRZYKŁADY SANs:$(NC)"
+	@echo -e "  # Zastąp domyślne SANs"
+	@echo -e "  make server SERVER_SANS=\"DNS:myapp.local,IP:192.168.1.100\""
+	@echo ""
+	@echo -e "  # Dodaj do domyślnych SANs"
+	@echo -e "  make server ADD_SERVER_SANS=\"DNS:vm1.local,DNS:lab3.local,IP:192.168.122.100\""
+	@echo ""
+	@echo -e "  # Kubernetes lab"
+	@echo -e "  make server ADD_SERVER_SANS=\"DNS:nginx-lab3.lab-3.svc.cluster.local,DNS:nginx-lab3,IP:10.96.0.50\""
 
 .DEFAULT_GOAL := help

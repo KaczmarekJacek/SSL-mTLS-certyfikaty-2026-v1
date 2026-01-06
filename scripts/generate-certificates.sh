@@ -35,7 +35,14 @@ ORG_UNIT="${ORG_UNIT:-IT Department}"
 
 # Nazwy hostów dla certyfikatu serwera (Kubernetes-ready)
 SERVER_CN="${SERVER_CN:-localhost}"
-SERVER_SANS="${SERVER_SANS:-DNS:localhost,DNS:*.localhost,DNS:*.default.svc.cluster.local,DNS:*.svc.cluster.local,IP:127.0.0.1,IP:10.0.0.1}"
+
+# Subject Alternative Names (SANs) - można nadpisać lub rozszerzyć
+# Format: "DNS:nazwa1,DNS:nazwa2,IP:1.2.3.4,IP:5.6.7.8"
+DEFAULT_SERVER_SANS="DNS:localhost,DNS:*.localhost,IP:127.0.0.1"
+SERVER_SANS="${SERVER_SANS:-${DEFAULT_SERVER_SANS}}"
+
+# Dodatkowe SANy (dodawane do SERVER_SANS zamiast zastępowania)
+ADD_SERVER_SANS="${ADD_SERVER_SANS:-}"
 
 # Domyślni klienci (można nadpisać przez DEFAULT_CLIENTS)
 # Format: "cn1,cn2,cn3" lub pojedyncza wartość
@@ -108,6 +115,61 @@ file_exists() {
 # Konwertuje CN na bezpieczną nazwę katalogu/pliku
 sanitize_name() {
     echo "$1" | sed 's/[^a-zA-Z0-9._-]/_/g' | tr '[:upper:]' '[:lower:]'
+}
+
+#-------------------------------------------------------------------------------
+# Generowanie sekcji alt_names dla OpenSSL
+#-------------------------------------------------------------------------------
+generate_san_config() {
+    local sans="$1"
+    local dns_count=0
+    local ip_count=0
+    
+    # Jeśli ADD_SERVER_SANS jest ustawione, dołącz do głównych SANs
+    if [[ -n "${ADD_SERVER_SANS}" ]]; then
+        sans="${sans},${ADD_SERVER_SANS}"
+    fi
+    
+    echo "[ alt_names ]"
+    
+    # Parsuj listę SANs (rozdzielonych przecinkami)
+    IFS=',' read -ra SAN_ARRAY <<< "$sans"
+    
+    for san in "${SAN_ARRAY[@]}"; do
+        # Trim whitespace
+        san=$(echo "$san" | xargs)
+        
+        if [[ "$san" == DNS:* ]]; then
+            ((dns_count++))
+            local value="${san#DNS:}"
+            echo "DNS.${dns_count} = ${value}"
+        elif [[ "$san" == IP:* ]]; then
+            ((ip_count++))
+            local value="${san#IP:}"
+            echo "IP.${ip_count} = ${value}"
+        elif [[ -n "$san" ]]; then
+            # Jeśli nie ma prefiksu, traktuj jako DNS
+            ((dns_count++))
+            echo "DNS.${dns_count} = ${san}"
+        fi
+    done
+}
+
+# Wyświetl skonfigurowane SANs
+show_configured_sans() {
+    local sans="$SERVER_SANS"
+    if [[ -n "${ADD_SERVER_SANS}" ]]; then
+        sans="${sans},${ADD_SERVER_SANS}"
+    fi
+    
+    log_info "Skonfigurowane SANs dla serwera:"
+    IFS=',' read -ra SAN_ARRAY <<< "$sans"
+    for san in "${SAN_ARRAY[@]}"; do
+        san=$(echo "$san" | xargs)
+        if [[ -n "$san" ]]; then
+            echo "    - ${san}"
+        fi
+    done
 }
 
 #-------------------------------------------------------------------------------
@@ -300,18 +362,31 @@ keyUsage = critical, nonRepudiation, digitalSignature, keyEncipherment
 extendedKeyUsage = clientAuth, emailProtection
 
 [ alt_names ]
-DNS.1 = localhost
-DNS.2 = *.localhost
-DNS.3 = *.default.svc.cluster.local
-DNS.4 = *.svc.cluster.local
-IP.1 = 127.0.0.1
-IP.2 = 10.0.0.1
+# Generowane dynamicznie - patrz poniżej
 
 [ crl_ext ]
 authorityKeyIdentifier=keyid:always
 EOF
 
+    # Generuj dynamiczną sekcję alt_names
+    local san_config=$(generate_san_config "$SERVER_SANS")
+    
+    # Zastąp placeholder rzeczywistą konfiguracją
+    # Używamy sed do zastąpienia sekcji alt_names
+    local temp_file="${EXPORT_DIR}/intermediate-ca/openssl_temp.cnf"
+    sed '/^\[ alt_names \]/,/^\[/{/^\[ alt_names \]/!{/^\[/!d}}' \
+        "${EXPORT_DIR}/intermediate-ca/openssl.cnf" > "$temp_file"
+    
+    # Wstaw nową sekcję alt_names przed [ crl_ext ]
+    awk -v san="$san_config" '
+        /^\[ crl_ext \]/ { print san; print "" }
+        { print }
+    ' "$temp_file" > "${EXPORT_DIR}/intermediate-ca/openssl.cnf"
+    
+    rm -f "$temp_file"
+
     log_success "Konfiguracja OpenSSL utworzona"
+    show_configured_sans
 }
 
 #===============================================================================
@@ -859,6 +934,8 @@ print_usage() {
     echo "Zmienne środowiskowe:"
     echo "  CLIENT_CN              CN dla nowego klienta (alternatywa dla --cn)"
     echo "  DEFAULT_CLIENTS        Lista domyślnych klientów (rozdzielona przecinkami)"
+    echo "  SERVER_SANS            Subject Alternative Names dla serwera"
+    echo "  ADD_SERVER_SANS        Dodatkowe SANs (dołączane do SERVER_SANS)"
     echo "  FORCE_REGENERATE_CA    Wymuś regenerację CA (true/false)"
     echo "  FORCE_REGENERATE_CERTS Wymuś regenerację certyfikatów (true/false)"
     echo ""
@@ -869,6 +946,16 @@ print_usage() {
     echo "  $0 client --cn service-b                # Dodaj kolejnego klienta"
     echo "  CLIENT_CN=admin $0 client               # Dodaj klienta (env)"
     echo "  DEFAULT_CLIENTS='svc-a,svc-b,admin' $0  # Wielu klientów na raz"
+    echo ""
+    echo "Przykłady SANs:"
+    echo "  # Zastąp domyślne SANs"
+    echo "  SERVER_SANS='DNS:myserver.local,DNS:api.myserver.local,IP:192.168.1.100' $0 server"
+    echo ""
+    echo "  # Dodaj do domyślnych SANs"
+    echo "  ADD_SERVER_SANS='DNS:vm1.local,DNS:lab3.local,IP:192.168.122.100' $0 server"
+    echo ""
+    echo "  # Kubernetes + custom domains"
+    echo "  SERVER_SANS='DNS:localhost,DNS:nginx.default.svc.cluster.local,DNS:myapp.local,IP:127.0.0.1,IP:10.0.0.50' $0 server"
 }
 
 #===============================================================================

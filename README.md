@@ -64,6 +64,16 @@ make verify
 DEFAULT_CLIENTS="service-a,service-b,admin" make all
 ```
 
+**Z niestandardowymi SANs (Subject Alternative Names):**
+
+```bash
+# Dodaj własne domeny i IP do certyfikatu serwera
+ADD_SERVER_SANS="DNS:vm1.local,DNS:myapp.local,IP:192.168.122.100" make server
+
+# Lub zastąp domyślne SANs
+SERVER_SANS="DNS:myserver.local,DNS:api.local,IP:10.0.0.50,IP:127.0.0.1" make server
+```
+
 ## Architektura PKI
 
 ```
